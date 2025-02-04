@@ -113,10 +113,11 @@ private[pulsar] abstract class PulsarSourceRDDBase(
               case (_: BatchMessageIdImpl, _: BatchMessageIdImpl) =>
               // we seek using a batch message id, we can read next directly in `getNext()`
               case (_: MessageIdImpl, cbmid: BatchMessageIdImpl) =>
-                // we seek using a message id, this is supposed to be read by previous task since
-                // it's inclusive for the last batch (start, end], so we skip this batch
 
-                // only when single record batch is sent.
+                // We can only really get to this scenario
+                // when producers sent a batched message will a single record.
+                // The reader will read a batched message but the message id
+                // returned by getLastMessageId() will return a MessageIdImpl.
                 val newStart = new MessageIdImpl(
                   cbmid.getLedgerId,
                   cbmid.getEntryId + 1,
@@ -125,7 +126,9 @@ private[pulsar] abstract class PulsarSourceRDDBase(
                 assert(cbmid.getBatchIndex == 0,
                   s"batch index should be 0, but got ${cbmid.getBatchIndex}")
                 logInfo(s"!====== NOT seeking anymore to ${newStart}, cbmid: ${cbmid}")
-
+                
+                // We shouldn't need to seek to the next entry. Calling reader.readNext()
+                // should do the same thing
 //                reader.seek(newStart)
               case (smid: MessageIdImpl, cmid: MessageIdImpl) =>
               // current entry is a non-batch entry, we can read next directly in `getNext()`
@@ -169,7 +172,9 @@ private[pulsar] abstract class PulsarSourceRDDBase(
                   processDataLoss(c, p)
                 }
               } else if (c.getEntryId == p.getEntryId + 1) {
-                // TODO double check here
+                // if we have moved to ready the next entry
+                // the batch index should be 0, i.e. to first record
+                // in the entry / batch
                 if (c.getBatchIndex != 0) {
                   processDataLoss(c, p)
                 }
