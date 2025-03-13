@@ -49,7 +49,7 @@ trait PulsarTest extends BeforeAndAfterAll with BeforeAndAfterEach {
   self: SparkFunSuite =>
   import PulsarOptions._
 
-  val CURRENT_VERSION = "3.0.1"
+  val CURRENT_VERSION = "3.0.6"
 
   var pulsarContainer: PulsarContainer = null
   var serviceUrl: String = null
@@ -64,6 +64,7 @@ trait PulsarTest extends BeforeAndAfterAll with BeforeAndAfterEach {
     brokerConfigs.foreach( kv =>
       pulsarContainer.withEnv("PULSAR_PREFIX_" + kv._1, kv._2)
     )
+
     pulsarContainer.start()
 
 
