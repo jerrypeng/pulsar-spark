@@ -49,7 +49,7 @@ trait PulsarTest extends BeforeAndAfterAll with BeforeAndAfterEach {
   self: SparkFunSuite =>
   import PulsarOptions._
 
-  val CURRENT_VERSION = "2.10.2"
+  val CURRENT_VERSION = "3.0.6"
 
   var pulsarContainer: PulsarContainer = null
   var serviceUrl: String = null
@@ -64,6 +64,7 @@ trait PulsarTest extends BeforeAndAfterAll with BeforeAndAfterEach {
     brokerConfigs.foreach( kv =>
       pulsarContainer.withEnv("PULSAR_PREFIX_" + kv._1, kv._2)
     )
+
     pulsarContainer.start()
 
 
@@ -132,7 +133,8 @@ trait PulsarTest extends BeforeAndAfterAll with BeforeAndAfterEach {
   def sendMessages(
       topic: String,
       messages: Array[String],
-      partition: Option[Int]): Seq[(String, MessageId)] = {
+      partition: Option[Int],
+      batched: Boolean = false): Seq[(String, MessageId)] = {
 
     val topicName = if (partition.isEmpty) topic else s"$topic$PartitionSuffix${partition.get}"
 
@@ -144,10 +146,23 @@ trait PulsarTest extends BeforeAndAfterAll with BeforeAndAfterEach {
     val producer = client.newProducer().topic(topicName).create()
 
     val offsets = try {
-      messages.map { m =>
-        val mid = producer.send(m.getBytes(StandardCharsets.UTF_8))
-        logInfo(s"\t Sent $m of mid: $mid")
-        (m, mid)
+      if (batched) {
+        messages.map { m =>
+            (m, producer.sendAsync(m.getBytes(StandardCharsets.UTF_8)))
+          }
+          .collect {
+            case (m, future) =>
+              val mid = future.get()
+              logInfo(s"\t Sent $m of mid: $mid class: ${mid.getClass}")
+              (m, mid)
+          }
+          .toSeq
+      } else {
+        messages.map { m =>
+          val mid = producer.send(m.getBytes(StandardCharsets.UTF_8))
+          logInfo(s"\t Sent $m of mid: $mid class: ${mid.getClass}")
+          (m, mid)
+        }.toSeq
       }
     } finally {
       producer.flush()
